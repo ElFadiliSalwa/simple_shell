@@ -1,0 +1,83 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <string.h>
+
+#define BUFFER_SIZE 1024
+
+void display_prompt();
+char *read_input();
+void execute_command(char *command);
+
+int main(void) {
+    char *command;
+
+    while (1) {
+        display_prompt();
+        command = read_input();
+
+        if (command == NULL) {
+            printf("\n");
+            break;
+        }
+
+        if (*command != '\0') {
+            execute_command(command);
+        }
+
+        free(command);
+    }
+
+    return EXIT_SUCCESS;
+}
+
+void display_prompt() {
+    printf("$ ");
+}
+
+char *read_input() {
+    ssize_t buffer_size = BUFFER_SIZE;
+    char *buffer = malloc(buffer_size);
+    ssize_t characters_read;
+
+    if (buffer == NULL) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+
+    characters_read = getline(&buffer, &buffer_size, stdin);
+
+    if (characters_read == -1) {
+        free(buffer);
+        return NULL;
+    }
+
+    buffer[characters_read - 1] = '\0'; // Remove the newline character
+
+    return buffer;
+}
+
+void execute_command(char *command) {
+    pid_t child_pid;
+    int status;
+
+    child_pid = fork();
+
+    if (child_pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    }
+
+    if (child_pid == 0) {
+        // Child process
+        char *argv[] = {command, NULL};
+        execve(command, argv, NULL);
+        perror(command);
+        _exit(EXIT_FAILURE);
+    } else {
+        // Parent process
+        waitpid(child_pid, &status, 0);
+    }
+}
