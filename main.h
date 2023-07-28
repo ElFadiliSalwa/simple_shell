@@ -7,6 +7,11 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <stddef.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <signal.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 1024
 
