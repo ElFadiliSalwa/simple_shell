@@ -1,92 +1,121 @@
 #include "main.h"
 
 /**
- * main - interpretes a command
- *
- * Return: int
+ * main - initialises the program's variables
+ * @argc: count args
+ * @argv: value args
+ * @env: environ's values
+ * Return: 0 in success
  */
-int main(void)
+int main(int argc, char *argv[], char *env[])
 {
-        char *command;
+    data_of_program data_struct = {NULL}, *data = &data_struct;
+    char *prompt = "";
+    initializeData(data, argc, argv, env);
+    signal(SIGINT, handle_ctrl_c);
+    if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO) && argc == 1)
+    {
+        errno = 2;
+        prompt = PROMPT_MSG;
+    }
+    errno = 0;
+    sisifo(prompt, data);
 
-        while (1)
-        {
-                display_prompt();
-                command = read_input();
-
-                if (command == NULL)
-                {
-                        printf("\n");
-                        break;
-                }
-
-                if (*command != '\0')
-                        execute_command(command);
-
-                free(command);
-        }
-        return EXIT_SUCCESS;
+    return (0);
 }
 
 /**
- * display_prompt - displays a prompt and waits for the user to type a cmd
+ * handleCtrlC - prints the prompt in a new line
+ * @UNUSED: unused property
  */
-void display_prompt()
+void handleCtrlC(int opr UNUSED)
 {
-        printf("#cisfun$ ");
+    _print("\n");
+    _print(PROMPT_MSG);
 }
 
 /**
- * read_input - reads the input
- *
- * Return: char
+ * initializeData - initialises the struct with the program's info
+ * @data: pointer to the struct
+ * @argv: value args
+ * @env: passed environ
+ * @argc: count args
  */
-char *read_input()
+void initializeData(data_of_program *data, int argc, char *argv[], char **env)
 {
-        ssize_t buffer_size = BUFFER_SIZE;
-        char *buffer = malloc(buffer_size);
-        ssize_t characters_read;
+    int i = 0;
 
-        if (buffer == NULL)
+    data->program_name = argv[0];
+    data->input_line = NULL;
+    data->command_name = NULL;
+    data->exec_counter = 0;
+
+    if (argc == 1)
+    {
+        data->file_descriptor = STDIN_FILENO;
+    }
+    else
+    {
+        data->file_descriptor = open(argv[1], O_RDONLY);
+        if (data->file_descriptor == -1)
         {
-                perror("malloc");
-                exit(EXIT_FAILURE);
+            _printe(data->program_name);
+            _printe(": 0: Can't open ");
+            _printe(argv[1]);
+            _printe("\n");
+            exit(127);
         }
+    }
 
-        characters_read = getline(&buffer, &buffer_size, stdin);
-        if (characters_read == -1)
+    data->env = malloc(sizeof(char *) * 50);
+    if (env)
+    {
+        for (; env[i]; i++)
         {
-                free(buffer);
-                return NULL;
+            data->env[i] = str_duplicate(env[i]);
         }
-
-        buffer[characters_read - 1] = '\0';
-        return buffer;
+    }
+    data->env[i] = NULL;
+    env = data->env;
+    data->alias_list = malloc(sizeof(char *) * 20);
+    for (i = 0; i < 20; i++)
+    {
+        data->alias_list[i] = NULL;
+    }
 }
 
 /**
- * execute_command - executes the command
- * @command: the command to execute
+ * sisifo - shows the prompt infinitely
+ * @prompt: printed prompt
+ * @data: pointer to the data
  */
-void execute_command(char *command)
+void sisifo(char *prompt, data_of_program *data)
 {
+    int error_code = 0, string_len = 0;
 
-        pid_t child_pid;
-        int status;
+    while (++(data->exec_counter))
+    {
+        _print(prompt);
 
-        child_pid = fork();
-        if (child_pid == -1)
+        error_code = string_len = _getline(data);
+
+        if (error_code == EOF)
         {
-                perror("fork");
-                exit(EXIT_FAILURE);
+            free_all_data(data);
+            exit(errno);
         }
-        if (child_pid == 0)
+        if (string_len >= 1)
         {
-                char *argv[] = {command, NULL};
-                execve(command, argv, NULL);
-                perror(command);
-                _exit(EXIT_FAILURE);
+            expand_alias(data);
+            expand_variables(data);
+            tokenize(data);
+            if (data->tokens[0])
+            {
+                error_code = execute(data);
+                if (error_code != 0)
+                    _print_error(error_code, data);
+            }
+            free_recurrent_data(data);
         }
-        else
-                waitpid(child_pid, &status, 0);
+    }
 }
